@@ -31,6 +31,16 @@ cameras_name_list = []
 lastActive = {}
 folder_names = {}
 imageHub = imagezmq.ImageHub()
+boundary_location = ()
+
+
+def inRange(*face_location):
+    face_start_x, face_end_x, face_start_y, face_end_y = face_location
+    boundary_start_x, boundary_end_x, boundary_start_y, boundary_end_y = boundary_location
+    pass
+
+
+save_file_name = str(uuid.uuid4())
 while True:
     try:
         (rpiName, frame) = imageHub.recv_image()
@@ -40,22 +50,25 @@ while True:
         # rpiName, IS_FRAME = rpiName.split('@@')
 
         for_face_frame = frame
-
         image_height, image_width, _ = frame.shape
-        frame = imutils.resize(frame, width=400)
+
+        left, top = max(0, image_width // 2 - 100), max(0, 30)
+        right, bottom = min(image_width, image_width // 2 + 100), min(image_height, image_height // 2)
+        frame = cv2.rectangle(frame, (left, top), (right, bottom), (255, 0, 100), 1)
+
+        # frame = imutils.resize(frame, width=400)
         # # frame = cv2.flip(frame, 1)
-        (h, w) = frame.shape[:2]
+        # (h, w) = frame.shape[:2]
 
         if 'AI' in rpiName:
             image = for_face_frame
             image.flags.writeable = False
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             results = face_detection_model.process(image)
-
+            cropped_baseImage = []
             if results.detections:
                 print(f'Total face detected {len(results.detections)}')
                 for detection in results.detections:
-                    print(detection)
                     # mp_drawing.draw_detection(image, detection)
                     location = detection.location_data.relative_bounding_box
                     x = location.xmin  # normalized coordinates
@@ -82,10 +95,11 @@ while True:
                     new_endX = min(int(endX + padding), image_width)
                     new_endY = min(int(endY + padding), image_height)
                     atleast_hero_image_path = None
-                    cropped_baseImage = image[new_cv2_y:new_endY, new_cv2_x:new_endX]
-                    image_name = str(uuid.uuid4()) + ".jpg"
-                    file_name = os.path.join(FACE_SAVING_PATH, image_name)
-                    cv2.imwrite(file_name, cropped_baseImage)
+                    if inRange(new_cv2_x, new_endX, new_cv2_y, new_endY):
+                        cropped_baseImage = image[new_cv2_y:new_endY, new_cv2_x:new_endX]
+                        image_name = save_file_name + ".jpg"
+                        file_name = os.path.join(FACE_SAVING_PATH, image_name)
+                        cv2.imwrite(file_name, cropped_baseImage)
 
             else:
                 print("Face not found")
@@ -97,8 +111,11 @@ while True:
 
             # resize image
             resized = cv2.resize(for_face_frame, dim, interpolation=cv2.INTER_AREA)
-            # cv2.imshow("roi", resized)
-            # cv2.imshow("Mask", frame)
+            # cv2.imshow("for_face_frame", for_face_frame)
+            if len(cropped_baseImage):
+                cv2.imshow("cropped_baseImage", cropped_baseImage)
+
+            cv2.imshow("original", frame)
 
             key = cv2.waitKey(30)
             if key == 27:
